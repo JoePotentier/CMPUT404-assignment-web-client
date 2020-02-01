@@ -25,6 +25,8 @@ import re
 # you may use urllib to encode data appropriately
 import urllib.parse as parser
 
+_DEBUG_ = False
+
 
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
@@ -36,13 +38,14 @@ class HTTPResponse(object):
         self.body = body
 
     def __str__(self):
-        return self.body
+        return f"{self.code}\r\n{self.body}"
 
 
 class HTTPClient(object):
     # def get_host_port(self,url):
 
     def connect(self, host, port):
+        self.debug((host, port))
         if port == None:
             port = 80
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -72,7 +75,7 @@ class HTTPClient(object):
         return "".join(body)
 
     def sendall(self, data):
-        # print(data)
+        self.debug(data)
         self.socket.sendall(data.encode("utf-8"))
 
     def close(self):
@@ -94,19 +97,22 @@ class HTTPClient(object):
         code = 500
         body = ""
         self.parseURL(url)
-        # print(self.url)
-        self.connect(self.url.netloc, self.url.port)
-        toSend = f"GET {self.url.path} HTTP/1.1\r\n"
+        self.connect(self.url.hostname, self.url.port)
+        if self.url.path == "":
+            path = "/"
+        else:
+            path = self.url.path
+        toSend = f"GET {path} HTTP/1.1\r\n"
         toSend += f"Host: {self.url.netloc}\r\n"
-        toSend += "User-Agent: curl/7.65.3\r\n"
+        toSend += "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36\r\n"
         toSend += "Accept: */*\r\n"
         toSend += "Connection: close\r\n"
         toSend += "\r\n"
         self.sendall(toSend)
         response = self.recvall(self.socket)
-        code = self.get_code(response)
+        code = int(self.get_code(response))
         body = self.get_body(response)
-        print(self.get_headers(response))
+        self.debug(self.get_headers(response))
         self.close()
         return HTTPResponse(code, body)
 
@@ -124,6 +130,11 @@ class HTTPClient(object):
 
     def parseURL(self, url):
         self.url = parser.urlparse(url)
+        self.debug(self.url)
+
+    def debug(self, text):
+        if _DEBUG_:
+            print(text)
 
 
 if __name__ == "__main__":
