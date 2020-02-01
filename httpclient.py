@@ -25,8 +25,6 @@ import re
 # you may use urllib to encode data appropriately
 import urllib.parse as parser
 
-_DEBUG_ = False
-
 
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
@@ -45,11 +43,14 @@ class HTTPClient(object):
     # def get_host_port(self,url):
 
     def connect(self, host, port):
-        self.debug((host, port))
         if port == None:
             port = 80
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((host, port))
+        try:
+            self.socket.connect((host, port))
+        except socket.gaierror as err:
+            print(err)
+            sys.exit()
         return None
 
     def get_code(self, data):
@@ -75,7 +76,6 @@ class HTTPClient(object):
         return "".join(body)
 
     def sendall(self, data):
-        self.debug(data)
         self.socket.sendall(data.encode("utf-8"))
 
     def close(self):
@@ -93,7 +93,7 @@ class HTTPClient(object):
                 done = not part
         return buffer.decode("utf-8")
 
-    def GET(self, url, args=None):
+    def standardSetup(self, url):
         code = 500
         body = ""
         self.parseURL(url)
@@ -102,24 +102,47 @@ class HTTPClient(object):
             path = "/"
         else:
             path = self.url.path
+        return code, body, path
+
+    def GET(self, url, args=None):
+        code, body, path = self.standardSetup(url)
         toSend = f"GET {path} HTTP/1.1\r\n"
         toSend += f"Host: {self.url.netloc}\r\n"
         toSend += "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36\r\n"
-        toSend += "Accept: */*\r\n"
+        toSend += "Accept: text/html\r\n"
         toSend += "Connection: close\r\n"
         toSend += "\r\n"
         self.sendall(toSend)
         response = self.recvall(self.socket)
         code = int(self.get_code(response))
         body = self.get_body(response)
-        self.debug(self.get_headers(response))
         self.close()
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
+        if args != None:
+            data = parser.urlencode(args)
+            content_length = len(data)
+        else:
+            data = None
+            content_length = 0
+        code, body, path = self.standardSetup(url)
+        toSend = f"POST {path} HTTP/1.1\r\n"
+        toSend += f"Host: {self.url.netloc}\r\n"
+        toSend += "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36\r\n"
+        toSend += "Accept: text/html\r\n"
+        toSend += "Content-Type: application/x-www-form-urlencoded\r\n"
+        toSend += f"Content-Length: {content_length}\r\n"
+        toSend += "Connection: close\r\n"
+        toSend += "\r\n"
+        if data != None:
+            toSend += f"{data}\r\n"
+        self.sendall(toSend)
+        response = self.recvall(self.socket)
+        code = int(self.get_code(response))
+        body = self.get_body(response)
+        self.close()
 
-        code = 500
-        body = ""
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
@@ -130,11 +153,6 @@ class HTTPClient(object):
 
     def parseURL(self, url):
         self.url = parser.urlparse(url)
-        self.debug(self.url)
-
-    def debug(self, text):
-        if _DEBUG_:
-            print(text)
 
 
 if __name__ == "__main__":
